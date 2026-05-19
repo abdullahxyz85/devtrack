@@ -3,12 +3,8 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect, useSearchParams } from "next/navigation";
-
-interface UserSettings {
-  id: string;
-  github_login: string;
-  is_public: boolean;
-}
+import DashboardWidgetSettings from "@/components/DashboardWidgetSettings";
+import type { UserSettings } from "@/app/api/user/settings/route";
 
 interface LinkedAccount {
   id: string;
@@ -31,7 +27,7 @@ function formatAddedDate(addedAt: string): string {
 
 function getStatusMessage(
   success: string | null,
-  error: string | null
+  error: string | null,
 ): { kind: "success" | "error"; message: string } | null {
   if (success === "account_linked") {
     return {
@@ -104,21 +100,19 @@ function SettingsPageContent() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [linkedAccounts, setLinkedAccounts] = useState<LinkedAccount[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [accountsLoading, setAccountsLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [removingAccountId, setRemovingAccountId] = useState<string | null>(
-    null
+    null,
   );
 
   const statusMessage = useMemo(
     () =>
-      getStatusMessage(
-        searchParams.get("success"),
-        searchParams.get("error")
-      ),
-    [searchParams]
+      getStatusMessage(searchParams.get("success"), searchParams.get("error")),
+    [searchParams],
   );
 
   // Redirect to signin if not authenticated
@@ -140,8 +134,16 @@ function SettingsPageContent() {
         if (res.ok) {
           const data = await res.json();
           setSettings(data);
+          setLoadError(null);
+        } else {
+          const errorData = await res.json().catch(() => ({}));
+          setLoadError(errorData?.error || "Failed to load settings");
+          console.error("Settings API error:", res.status, errorData);
         }
       } catch (error) {
+        const errorMsg =
+          error instanceof Error ? error.message : "Unknown error";
+        setLoadError(`Error: ${errorMsg}`);
         console.error("Failed to load settings:", error);
       } finally {
         setLoading(false);
@@ -201,6 +203,28 @@ function SettingsPageContent() {
     }
   };
 
+  const handleUpdateWidgetPrefs = async (prefs: Record<string, boolean>) => {
+    if (!settings) return;
+
+    try {
+      const res = await fetch("/api/user/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_widget_prefs: prefs }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setSettings(updated);
+      } else {
+        throw new Error("Failed to update preferences");
+      }
+    } catch (error) {
+      console.error("Error updating widget preferences:", error);
+      throw error;
+    }
+  };
+
   const copyShareLink = () => {
     if (!settings) return;
 
@@ -226,7 +250,7 @@ function SettingsPageContent() {
       }
 
       setLinkedAccounts((current) =>
-        current.filter((account) => account.githubId !== githubId)
+        current.filter((account) => account.githubId !== githubId),
       );
     } catch {
       setRemoveError("Failed to remove account");
@@ -260,8 +284,16 @@ function SettingsPageContent() {
       <div className="min-h-screen bg-[var(--background)] p-4 md:p-8 text-[var(--foreground)] transition-colors">
         <div className="max-w-2xl mx-auto">
           <p className="text-[var(--muted-foreground)]">
-            Failed to load settings.
+            {loadError || "Failed to load settings."}
           </p>
+          {loadError && (
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] text-sm font-medium hover:opacity-90 transition-opacity"
+            >
+              Try Again
+            </button>
+          )}
         </div>
       </div>
     );
@@ -434,6 +466,14 @@ function SettingsPageContent() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Dashboard Widgets Section */}
+        <div className="mt-6">
+          <DashboardWidgetSettings
+            settings={settings}
+            onUpdate={handleUpdateWidgetPrefs}
+          />
         </div>
       </div>
     </div>

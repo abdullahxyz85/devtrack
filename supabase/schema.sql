@@ -4,6 +4,18 @@ create table if not exists users (
   id           text primary key default gen_random_uuid()::text,
   github_id    text unique not null,
   github_login text not null,
+  is_public    boolean default false,
+  user_widget_prefs jsonb default jsonb_build_object(
+    'contributionGraph', true,
+    'streakTracker', true,
+    'prMetrics', true,
+    'topRepos', true,
+    'languageBreakdown', true,
+    'goalTracker', true,
+    'ciAnalytics', true,
+    'issuesTracker', true,
+    'friendComparison', true
+  ),
   created_at   timestamptz default now(),
   updated_at   timestamptz default now()
 );
