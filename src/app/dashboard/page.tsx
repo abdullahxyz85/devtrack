@@ -17,6 +17,7 @@ import WeeklySummaryCard from "@/components/WeeklySummaryCard";
 import ExportButton from "@/components/ExportButton";
 import Link from "next/link";
 import PersonalRecords from "@/components/PersonalRecords";
+import DiffTrendChart from "@/components/DiffTrendChart";
 import { authOptions } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
@@ -76,6 +77,11 @@ export default async function DashboardPage() {
         <PRMetrics />
         <PRBreakdownChart />
         <CommitTimeChart />
+      </div>
+
+      {/* Row 2.5: Diff Trend */}
+      <div className="mt-6">
+        <DiffTrendChart />
       </div>
 
       {/* Row 3: Issue metrics + CI analytics */}
