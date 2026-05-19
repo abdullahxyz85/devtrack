@@ -3,8 +3,19 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSession } from "next-auth/react";
 import { redirect, useSearchParams } from "next/navigation";
+
 import DashboardWidgetSettings from "@/components/DashboardWidgetSettings";
 import type { UserSettings } from "@/app/api/user/settings/route";
+
+import { useHeatmapTheme } from "@/hooks/useHeatmapTheme";
+
+interface UserSettings {
+  id: string;
+  github_login: string;
+  is_public: boolean;
+  leaderboard_opt_in: boolean;
+}
+
 
 interface LinkedAccount {
   id: string;
@@ -115,6 +126,8 @@ function SettingsPageContent() {
     [searchParams],
   );
 
+  const { theme, setTheme } = useHeatmapTheme();
+
   // Redirect to signin if not authenticated
   useEffect(() => {
     if (status === "unauthenticated") {
@@ -203,6 +216,7 @@ function SettingsPageContent() {
     }
   };
 
+
   const handleUpdateWidgetPrefs = async (prefs: Record<string, boolean>) => {
     if (!settings) return;
 
@@ -226,12 +240,39 @@ function SettingsPageContent() {
   };
 
   const copyShareLink = () => {
+
+  const handleToggleLeaderboard = async (value: boolean) => {
+
     if (!settings) return;
 
+    setSaving(true);
+    try {
+      const res = await fetch("/api/user/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ leaderboard_opt_in: value }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setSettings(updated);
+      } else {
+        console.error("Failed to update leaderboard setting");
+      }
+    } catch (error) {
+      console.error("Error updating leaderboard setting:", error);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const copyShareLink = () => {
+    if (!settings) return;
     const link = `${window.location.origin}/u/${settings.github_login}`;
-    navigator.clipboard.writeText(link);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    navigator.clipboard.writeText(link).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => { });
   };
 
   const handleRemoveAccount = async (githubId: string) => {
@@ -353,7 +394,7 @@ function SettingsPageContent() {
                   }`}
                 />
                 <div
-                  className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                  className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-[var(--card)] transition-transform ${
                     settings.is_public ? "translate-x-4" : ""
                   }`}
                 />
@@ -375,7 +416,9 @@ function SettingsPageContent() {
                   className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--control)] px-4 py-2 text-sm text-[var(--card-foreground)] focus:outline-none"
                 />
                 <button
+                  type="button"
                   onClick={copyShareLink}
+                  aria-label="Copy profile URL"
                   className="px-4 py-2 rounded-lg bg-[var(--accent)] text-[var(--accent-foreground)] text-sm font-medium hover:opacity-90 transition-opacity"
                 >
                   {copied ? "Copied!" : "Copy"}
@@ -383,6 +426,39 @@ function SettingsPageContent() {
               </div>
             </div>
           )}
+
+          <div className="mt-6 pt-6 border-t border-[var(--border)]">
+            <h3 className="text-sm font-semibold text-[var(--card-foreground)] mb-3">
+              Heatmap colour scheme
+            </h3>
+            <p className="text-sm text-[var(--muted-foreground)] mb-4">
+              Choose a colour scheme for the contribution and streak heatmaps.
+            </p>
+            <div className="space-y-3">
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--control)] px-4 py-3 text-[var(--foreground)]">
+                <span>Default</span>
+                <input
+                  type="radio"
+                  name="heatmap-theme"
+                  value="default"
+                  checked={theme === "default"}
+                  onChange={() => setTheme("default")}
+                  className="accent-[var(--accent)] focus:ring-[var(--accent)]"
+                />
+              </label>
+              <label className="flex cursor-pointer items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--control)] px-4 py-3 text-[var(--foreground)]">
+                <span>Colour-blind friendly</span>
+                <input
+                  type="radio"
+                  name="heatmap-theme"
+                  value="colour-blind-friendly"
+                  checked={theme === "colour-blind-friendly"}
+                  onChange={() => setTheme("colour-blind-friendly")}
+                  className="accent-[var(--accent)] focus:ring-[var(--accent)]"
+                />
+              </label>
+            </div>
+          </div>
 
           {!settings.is_public && (
             <div className="mt-4 p-3 rounded-lg bg-[var(--control)] border border-[var(--border)]">
@@ -392,6 +468,51 @@ function SettingsPageContent() {
               </p>
             </div>
           )}
+        </div>
+
+        <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold text-[var(--card-foreground)]">
+                Public Leaderboard
+              </h2>
+              <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+                Appear on the public leaderboard for streaks, commits, and pull
+                requests.
+              </p>
+            </div>
+
+            <label className="flex items-center cursor-pointer select-none">
+              <div className="relative">
+                <input
+                  type="checkbox"
+                  checked={settings.leaderboard_opt_in}
+                  onChange={(e) => handleToggleLeaderboard(e.target.checked)}
+                  disabled={saving}
+                  className="sr-only"
+                />
+                <div
+                  className={`block h-6 w-10 rounded-full transition-colors ${
+                    settings.leaderboard_opt_in
+                      ? "bg-[var(--accent)]"
+                      : "bg-[var(--control)]"
+                  }`}
+                />
+                <div
+                  className={`absolute left-1 top-1 h-4 w-4 rounded-full bg-[var(--card)] transition-transform ${
+                    settings.leaderboard_opt_in ? "translate-x-4" : ""
+                  }`}
+                />
+              </div>
+            </label>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--control)] p-3">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Turning this on also enables your public profile so leaderboard
+              rows can link to your DevTrack stats.
+            </p>
+          </div>
         </div>
 
         <div className="mt-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">

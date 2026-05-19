@@ -12,12 +12,15 @@ import TopRepos from "@/components/TopRepos";
 import PinnedRepos from "@/components/PinnedRepos";
 import LanguageBreakdown from "@/components/LanguageBreakdown";
 import CommitTimeChart from "@/components/CommitTimeChart";
+import CIAnalytics from "@/components/CIAnalytics";
 import IssueMetrics from "@/components/IssueMetrics";
 import StreakAtRiskBanner from "@/components/StreakAtRiskBanner";
 import FriendComparison from "@/components/FriendComparison";
 import WeeklySummaryCard from "@/components/WeeklySummaryCard";
 import ExportButton from "@/components/ExportButton";
+import Link from "next/link";
 import PersonalRecords from "@/components/PersonalRecords";
+
 import DiffTrendChart from "@/components/DiffTrendChart";
 
 const DEFAULT_WIDGET_PREFS: Record<string, boolean> = {
@@ -65,15 +68,41 @@ export default function DashboardPage() {
   // Show dashboard while loading (with all widgets visible by default)
   const prefs = widgetPrefs || DEFAULT_WIDGET_PREFS;
 
+import { authOptions } from "@/lib/auth";
+import { cookies } from "next/headers";
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+
+export default async function DashboardPage() {
+  const allowPlaywrightBypass =
+    process.env.PLAYWRIGHT_AUTH_BYPASS === "1" &&
+    cookies().get("playwright-dashboard-auth")?.value === "1";
+  const session = allowPlaywrightBypass
+    ? null
+    : await getServerSession(authOptions);
+
+  if (!session && !allowPlaywrightBypass) {
+    redirect("/");
+  }
+
+
   return (
     <div className="min-h-screen bg-[var(--background)] p-4 md:p-8 text-[var(--foreground)] transition-colors">
       <DashboardHeader />
-      <div className="mb-6 flex justify-end">
+      <div className="mb-6 flex justify-end items-center gap-2">
+        <Link
+          href="/dashboard/settings"
+          className="rounded-lg border border-[var(--border)] bg-[var(--control)] px-3 py-1 text-sm text-[var(--foreground)] hover:opacity-90 transition-opacity"
+        >
+          Settings
+        </Link>
         <ExportButton />
       </div>
       <StreakAtRiskBanner />
 
-      <WeeklySummaryCard />
+      <div className="mb-6">
+        <WeeklySummaryCard />
+      </div>
 
       <div className="mb-6">
         <PersonalRecords />
@@ -108,12 +137,22 @@ export default function DashboardPage() {
         {prefs.ciAnalytics && <CommitTimeChart />}
       </div>
 
+
       {/* Row 3: Issue metrics */}
       {prefs.issuesTracker && (
         <div className="mt-6">
           <IssueMetrics />
         </div>
       )}
+
+      {/* Row 3: Issue metrics + CI analytics */}
+      <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <IssueMetrics />
+        </div>
+        <CIAnalytics />
+      </div>
+
 
       {/* Row 4: Pinned repositories */}
       <div className="mt-6">
