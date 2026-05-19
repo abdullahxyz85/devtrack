@@ -124,6 +124,7 @@ export default function PRMetrics() {
         PR Analytics
       </h2>
       {loading ? (
+
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {[1, 2, 3, 4].map((i) => (
@@ -134,6 +135,22 @@ export default function PRMetrics() {
             ))}
           </div>
           <div className="bg-[var(--card-muted)] rounded-lg p-4 h-64 animate-pulse" />
+
+        <div
+          role="status"
+          aria-live="polite"
+          aria-busy="true"
+          className="grid grid-cols-2 md:grid-cols-4 gap-4"
+        >
+          <span className="sr-only">Loading PR analytics</span>
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              aria-hidden="true"
+              className="bg-[var(--card-muted)] rounded-lg p-4 h-24 animate-pulse"
+            />
+          ))}
+
         </div>
       ) : error ? (
         <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-400">

@@ -7,7 +7,14 @@ import {
   mergeMetrics,
 } from "@/lib/github-accounts";
 import { GITHUB_API } from "@/lib/github";
+import {
+  isMetricsCacheBypassed,
+  METRICS_CACHE_TTL_SECONDS,
+  metricsCacheKey,
+  withMetricsCache,
+} from "@/lib/metrics-cache";
 import { supabaseAdmin } from "@/lib/supabase";
+import { resolveAppUser } from "@/lib/resolve-user";
 
 export const dynamic = "force-dynamic";
 
@@ -132,9 +139,29 @@ async function fetchPRMetrics(
   };
 }
 
+
 function formatPRMetrics(
   metrics: PRMetricsBase & { timeDistribution: PRTimeDistribution },
 ) {
+
+async function fetchCachedPRMetrics(
+  token: string,
+  cacheContext: { bypass: boolean; userId: string }
+): Promise<PRMetricsBase> {
+  const key = metricsCacheKey(cacheContext.userId, "prs");
+
+  return withMetricsCache(
+    {
+      bypass: cacheContext.bypass,
+      key,
+      ttlSeconds: METRICS_CACHE_TTL_SECONDS.prs,
+    },
+    () => fetchPRMetrics(token)
+  );
+}
+
+function formatPRMetrics(metrics: PRMetricsBase) {
+
   return {
     open: metrics.open,
     merged: metrics.merged,
@@ -153,11 +180,22 @@ export async function GET(req: NextRequest) {
   }
 
   const accountId = req.nextUrl.searchParams.get("accountId");
+
   const days = Number(req.nextUrl.searchParams.get("days")) || 30;
 
   if (!accountId) {
     try {
       const result = await fetchPRMetrics(session.accessToken, days);
+
+  const bypass = isMetricsCacheBypassed(req);
+
+  if (!accountId) {
+    try {
+      const result = await fetchCachedPRMetrics(session.accessToken, {
+        bypass,
+        userId: session.githubId ?? session.githubLogin ?? "primary",
+      });
+
       return Response.json(formatPRMetrics(result));
     } catch {
       return Response.json({ error: "GitHub API error" }, { status: 502 });
@@ -168,11 +206,7 @@ export async function GET(req: NextRequest) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: userRow } = await supabaseAdmin
-    .from("users")
-    .select("id")
-    .eq("github_id", session.githubId)
-    .single();
+  const userRow = await resolveAppUser(session.githubId, session.githubLogin);
 
   if (!userRow) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
@@ -189,7 +223,13 @@ export async function GET(req: NextRequest) {
     );
 
     const results = await Promise.allSettled(
+
       accounts.map((account) => fetchPRMetrics(account.token, days)),
+
+      accounts.map((account) =>
+        fetchCachedPRMetrics(account.token, { bypass, userId: account.githubId })
+      )
+
     );
 
     const merged = mergeMetrics(results, (a, b) => {
@@ -237,7 +277,14 @@ export async function GET(req: NextRequest) {
   }
 
   try {
+
     const result = await fetchPRMetrics(token, days);
+
+    const result = await fetchCachedPRMetrics(token, {
+      bypass,
+      userId: accountId === session.githubId ? session.githubId : accountId,
+    });
+
     return Response.json(formatPRMetrics(result));
   } catch {
     return Response.json({ error: "GitHub API error" }, { status: 502 });
