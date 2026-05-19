@@ -81,7 +81,7 @@ async function fetchPRMetrics(
             (new Date(pr.pull_request!.merged_at!).getTime() -
               new Date(pr.created_at).getTime()),
           0,
-        ) / closedPRs.length
+        ) / mergedPRs.length
       : 0;
 
   // Calculate time distribution
@@ -92,9 +92,9 @@ async function fetchPRMetrics(
     moreThan7d: 0,
   };
 
-  for (const pr of closedPRs) {
+  for (const pr of mergedPRs) {
     const durationMs =
-      new Date(pr.closed_at!).getTime() - new Date(pr.created_at).getTime();
+      new Date(pr.pull_request!.merged_at!).getTime() - new Date(pr.created_at).getTime();
 
     if (durationMs < 3600000) {
       // Less than 1 hour
@@ -127,11 +127,8 @@ async function fetchPRMetrics(
     merged,
     total: data.total_count,
     avgReviewHours: Math.round(avgReviewMs / 3600000),
-    mergeRate: data.total_count > 0 ? merged / data.total_count : 0,
-    timeDistribution,
-
     mergeRate: sampleTotal > 0 ? merged / sampleTotal : 0,
-
+    timeDistribution,
   };
 }
 
