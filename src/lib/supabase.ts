@@ -67,6 +67,7 @@ export async function updateUserPublicFlag(
 
 /**
  * Ensure user exists in database. Creates if not found.
+ * Uses upsert to handle concurrent sign-ins safely.
  * Call this when user first logs in or accesses protected routes.
  */
 export async function ensureUserExists(
@@ -74,56 +75,36 @@ export async function ensureUserExists(
   githubLogin: string,
 ): Promise<User | null> {
   try {
-    // Try to find existing user
-    const { data: existingUser, error: fetchError } = await supabaseAdmin
+    const { data: user, error } = await supabaseAdmin
       .from("users")
+      .upsert(
+        {
+          github_id: githubId,
+          github_login: githubLogin,
+          is_public: false,
+          user_widget_prefs: {
+            contributionGraph: true,
+            streakTracker: true,
+            prMetrics: true,
+            topRepos: true,
+            languageBreakdown: true,
+            goalTracker: true,
+            ciAnalytics: true,
+            issuesTracker: true,
+            friendComparison: true,
+          },
+        },
+        { onConflict: "github_id" },
+      )
       .select("id,github_id,github_login,is_public,created_at,updated_at")
-      .eq("github_id", githubId)
       .single();
 
-    // If user exists, return it
-    if (existingUser) {
-      return existingUser as User;
+    if (error) {
+      console.error("Error upserting user:", error);
+      return null;
     }
 
-    // If not found (PGRST116 error), create new user
-    if (fetchError?.code === "PGRST116") {
-      const { data: newUser, error: createError } = await supabaseAdmin
-        .from("users")
-        .insert([
-          {
-            github_id: githubId,
-            github_login: githubLogin,
-            is_public: false,
-            user_widget_prefs: {
-              contributionGraph: true,
-              streakTracker: true,
-              prMetrics: true,
-              topRepos: true,
-              languageBreakdown: true,
-              goalTracker: true,
-              ciAnalytics: true,
-              issuesTracker: true,
-              friendComparison: true,
-            },
-          },
-        ])
-        .select("id,github_id,github_login,is_public,created_at,updated_at")
-        .single();
-
-      if (createError) {
-        console.error("Error creating user:", createError);
-        return null;
-      }
-
-      return newUser as User;
-    }
-
-    // Other error
-    if (fetchError) {
-      console.error("Error fetching user:", fetchError);
-    }
-    return null;
+    return user as User;
   } catch (error) {
     console.error("Unexpected error in ensureUserExists:", error);
     return null;
