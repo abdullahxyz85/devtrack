@@ -17,7 +17,6 @@ import WeeklySummaryCard from "@/components/WeeklySummaryCard";
 import ExportButton from "@/components/ExportButton";
 import Link from "next/link";
 import PersonalRecords from "@/components/PersonalRecords";
-import DiffTrendChart from "@/components/DiffTrendChart";
 import { authOptions } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { getServerSession } from "next-auth";
@@ -63,9 +62,6 @@ export default async function DashboardPage() {
           <ContributionGraph />
           <div className="mt-6">
             <ContributionHeatmap />
-          </div>
-          <div className="mt-6">
-            <DiffTrendChart />
           </div>
         </div>
 
