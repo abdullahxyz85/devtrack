@@ -26,7 +26,9 @@ export async function getUserByUsername(
 ): Promise<User | null> {
   const { data, error } = await supabaseAdmin
     .from("users")
-    .select("id,github_id,github_login,is_public,leaderboard_opt_in,created_at,updated_at")
+    .select(
+      "id,github_id,github_login,is_public,leaderboard_opt_in,created_at,updated_at",
+    )
     .eq("github_login", username)
     .eq("is_public", true)
     .single();
@@ -54,7 +56,9 @@ export async function updateUserPublicFlag(
     .from("users")
     .update({ is_public: isPublic })
     .eq("id", userId)
-    .select("id,github_id,github_login,is_public,leaderboard_opt_in,created_at,updated_at")
+    .select(
+      "id,github_id,github_login,is_public,leaderboard_opt_in,created_at,updated_at",
+    )
     .single();
 
   if (error) {
