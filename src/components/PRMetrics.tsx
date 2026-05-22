@@ -146,6 +146,7 @@ export default function PRMetrics() {
         >
           <span className="sr-only">Loading PR analytics</span>
 
+
           {[1, 2, 3, 4].map((i) => (
             <div
               key={i}
@@ -156,6 +157,9 @@ export default function PRMetrics() {
 
 
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+
             {[1, 2, 3, 4, 5].map((i) => (
               <div
                 key={i}
@@ -260,7 +264,7 @@ export default function PRMetrics() {
 
         <div className="space-y-6">
           {/* Stat grid */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
             {stats.map((stat) => (
               <div
                 key={stat.label}
