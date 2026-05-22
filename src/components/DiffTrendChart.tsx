@@ -141,7 +141,7 @@ export default function DiffTrendChart() {
                   borderRadius: "0.5rem",
                   color: "var(--card-foreground)",
                 }}
-                cursor={{ fill: "rgba(99, 102, 241, 0.1)" }}
+                cursor={{ fill: "var(--accent)", fillOpacity: 0.1 }}
                 formatter={(value, name) => {
                   if (name === "additions") {
                     return [`${value} added`, "Additions"];

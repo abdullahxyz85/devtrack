@@ -3,6 +3,12 @@ import { NextRequest } from "next/server";
 import { authOptions } from "@/lib/auth";
 import { getAccountToken, getAllAccounts } from "@/lib/github-accounts";
 import { GITHUB_API } from "@/lib/github";
+import {
+  isMetricsCacheBypassed,
+  METRICS_CACHE_TTL_SECONDS,
+  metricsCacheKey,
+  withMetricsCache,
+} from "@/lib/metrics-cache";
 import { supabaseAdmin } from "@/lib/supabase";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +54,7 @@ async function fetchRepoStats(
       weeks.push({
         week: date.toISOString().split("T")[0],
         additions,
-        deletions,
+        deletions: Math.abs(deletions),
       });
     }
   }
@@ -78,6 +84,24 @@ async function getUserTopRepos(token: string, githubLogin: string) {
     name: r.name,
     owner: r.owner.login,
   }));
+}
+
+async function getGithubLoginForAccount(
+  userId: string,
+  accountGithubId: string,
+): Promise<string | null> {
+  const { data, error } = await supabaseAdmin
+    .from("user_github_accounts")
+    .select("github_login")
+    .eq("user_id", userId)
+    .eq("github_id", accountGithubId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.github_login as string;
 }
 
 function aggregateWeeks(allWeeks: WeekData[][]): {
@@ -126,28 +150,39 @@ export async function GET(req: NextRequest) {
   }
 
   const accountId = req.nextUrl.searchParams.get("accountId");
+  const bypassCache = isMetricsCacheBypassed(req);
 
   try {
     if (!accountId) {
-      // Fetch for main account
-      const repos = await getUserTopRepos(
-        session.accessToken,
-        session.githubLogin,
-      );
+      return withMetricsCache(
+        {
+          bypass: bypassCache,
+          key: metricsCacheKey(session.githubLogin, "diffTrend", {
+            accountId: session.githubLogin,
+          }),
+          ttlSeconds: METRICS_CACHE_TTL_SECONDS.diffTrend,
+        },
+        async () => {
+          const repos = await getUserTopRepos(
+            session.accessToken,
+            session.githubLogin,
+          );
 
-      const repoStats = await Promise.all(
-        repos.map((repo) =>
-          fetchRepoStats(session.accessToken, repo.owner, repo.name),
-        ),
-      );
+          const repoStats = await Promise.all(
+            repos.map((repo) =>
+              fetchRepoStats(session.accessToken, repo.owner, repo.name),
+            ),
+          );
 
-      const { weeks, isComputing } = aggregateWeeks(repoStats);
+          const { weeks, isComputing } = aggregateWeeks(repoStats);
 
-      return Response.json({
-        weeks: weeks.length > 0 ? weeks : [],
-        isComputing,
-        repoCount: repos.length,
-      });
+          return {
+            weeks: weeks.length > 0 ? weeks : [],
+            isComputing,
+            repoCount: repos.length,
+          };
+        },
+      ).then((result) => Response.json(result));
     }
 
     // Handle multiple accounts
@@ -166,38 +201,52 @@ export async function GET(req: NextRequest) {
     }
 
     if (accountId === "combined") {
-      const accounts = await getAllAccounts(
+      return withMetricsCache(
         {
-          token: session.accessToken,
-          githubId: session.githubId,
-          githubLogin: session.githubLogin,
+          bypass: bypassCache,
+          key: metricsCacheKey(userRow.id, "diffTrend", {
+            accountId: "combined",
+          }),
+          ttlSeconds: METRICS_CACHE_TTL_SECONDS.diffTrend,
         },
-        userRow.id,
-      );
-
-      const allRepoStats: WeekData[][] = [];
-
-      for (const account of accounts) {
-        try {
-          const repos = await getUserTopRepos(account.token, account.login);
-          const repoStats = await Promise.all(
-            repos.map((repo) =>
-              fetchRepoStats(account.token, repo.owner, repo.name),
-            ),
+        async () => {
+          const accounts = await getAllAccounts(
+            {
+              token: session.accessToken,
+              githubId: session.githubId,
+              githubLogin: session.githubLogin,
+            },
+            userRow.id,
           );
-          allRepoStats.push(...repoStats);
-        } catch {
-          // Skip this account if it fails
-        }
-      }
 
-      const { weeks, isComputing } = aggregateWeeks(allRepoStats);
+          const allRepoStats: WeekData[][] = [];
 
-      return Response.json({
-        weeks: weeks.length > 0 ? weeks : [],
-        isComputing,
-        repoCount: accounts.length,
-      });
+          for (const account of accounts) {
+            try {
+              const repos = await getUserTopRepos(
+                account.token,
+                account.githubLogin,
+              );
+              const repoStats = await Promise.all(
+                repos.map((repo) =>
+                  fetchRepoStats(account.token, repo.owner, repo.name),
+                ),
+              );
+              allRepoStats.push(...repoStats);
+            } catch {
+              // Skip this account if it fails
+            }
+          }
+
+          const { weeks, isComputing } = aggregateWeeks(allRepoStats);
+
+          return {
+            weeks: weeks.length > 0 ? weeks : [],
+            isComputing,
+            repoCount: accounts.length,
+          };
+        },
+      ).then((result) => Response.json(result));
     }
 
     const token =
@@ -209,18 +258,36 @@ export async function GET(req: NextRequest) {
       return Response.json({ error: "Account not found" }, { status: 404 });
     }
 
-    const repos = await getUserTopRepos(token, accountId);
-    const repoStats = await Promise.all(
-      repos.map((repo) => fetchRepoStats(token, repo.owner, repo.name)),
-    );
+    const githubLogin =
+      accountId === session.githubId
+        ? session.githubLogin
+        : await getGithubLoginForAccount(userRow.id, accountId);
 
-    const { weeks, isComputing } = aggregateWeeks(repoStats);
+    if (!githubLogin) {
+      return Response.json({ error: "Account not found" }, { status: 404 });
+    }
 
-    return Response.json({
-      weeks: weeks.length > 0 ? weeks : [],
-      isComputing,
-      repoCount: repos.length,
-    });
+    return withMetricsCache(
+      {
+        bypass: bypassCache,
+        key: metricsCacheKey(userRow.id, "diffTrend", { accountId }),
+        ttlSeconds: METRICS_CACHE_TTL_SECONDS.diffTrend,
+      },
+      async () => {
+        const repos = await getUserTopRepos(token, githubLogin);
+        const repoStats = await Promise.all(
+          repos.map((repo) => fetchRepoStats(token, repo.owner, repo.name)),
+        );
+
+        const { weeks, isComputing } = aggregateWeeks(repoStats);
+
+        return {
+          weeks: weeks.length > 0 ? weeks : [],
+          isComputing,
+          repoCount: repos.length,
+        };
+      },
+    ).then((result) => Response.json(result));
   } catch {
     return Response.json(
       { error: "Failed to fetch diff trend data" },

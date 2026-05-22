@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 
 export const METRICS_CACHE_TTL_SECONDS = {
   contributions: 5 * 60,
+  diffTrend: 10 * 60,
   repos: 10 * 60,
   prs: 10 * 60,
   streak: 2 * 60,
@@ -43,7 +44,7 @@ export function isMetricsCacheBypassed(req: NextRequest): boolean {
 export function metricsCacheKey(
   userId: string,
   endpoint: MetricsCacheEndpoint,
-  params: Record<string, CacheParamValue> = {}
+  params: Record<string, CacheParamValue> = {},
 ): string {
   const cacheParams = new URLSearchParams();
 
@@ -71,7 +72,7 @@ export async function cacheGet<T>(key: string): Promise<T | null> {
 export async function cacheSet<T>(
   key: string,
   value: T,
-  ttlSeconds: number
+  ttlSeconds: number,
 ): Promise<void> {
   const redis = getRedisClient();
   if (!redis) {
@@ -91,7 +92,7 @@ export async function withMetricsCache<T>(
     key: string;
     ttlSeconds: number;
   },
-  loadFresh: () => Promise<T>
+  loadFresh: () => Promise<T>,
 ): Promise<T> {
   if (!options.bypass) {
     const cached = await cacheGet<T>(options.key);
