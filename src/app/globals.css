@@ -21,8 +21,14 @@
   --control-hover: #cbd5e1;
   --tooltip: #ffffff;
   --tooltip-foreground: #0f172a;
+
   --success: #10b981;
   --destructive: #ef4444;
+  --destructive: #ef4444;
+  --destructive-muted: rgba(239, 68, 68, 0.1);
+  --destructive-muted-border: rgba(239, 68, 68, 0.3);
+  --destructive-foreground: #ffffff;
+
 }
 
 .dark {
@@ -44,8 +50,14 @@
   --control-hover: #475569;
   --tooltip: #1e293b;
   --tooltip-foreground: #f8fafc;
+
   --success: #34d399;
   --destructive: #f87171;
+  --destructive: #f87171;
+  --destructive-muted: rgba(248, 113, 113, 0.1);
+  --destructive-muted-border: rgba(248, 113, 113, 0.3);
+  --destructive-foreground: #ffffff;
+
 }
 
 body {
